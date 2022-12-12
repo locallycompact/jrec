@@ -30,6 +30,7 @@ import Control.DeepSeq
 import Control.Monad.Reader
 import qualified Control.Monad.State as S
 import Data.Aeson
+import Data.Aeson.Key as K
 import Data.Aeson.Types (Parser)
 import Data.Constraint
 import Data.List (intercalate)
@@ -554,7 +555,7 @@ showRec = reflectRec @Show Proxy (\k v -> (k, show v))
 
 class ToJSON a => EncodeField a where
   encodeField :: a -> Maybe Value
-  encodeKV :: T.Text -> a -> Series
+  encodeKV :: Key -> a -> Series
 
 instance ToJSON a => EncodeField a where
   encodeField = pure . toJSON
@@ -567,11 +568,11 @@ instance {-# OVERLAPS #-} ToJSON a => EncodeField (Maybe a) where
 
 recToValue :: forall lts. (RecApply lts lts EncodeField) => JSONOptions -> Rec lts -> Value
 recToValue options r =
-  object $ catMaybes $ reflectRec @EncodeField Proxy (\k v -> (T.pack (fieldTransform options k),) <$> encodeField v) r
+  object $ catMaybes $ reflectRec @EncodeField Proxy (\k v -> (K.fromString (fieldTransform options k),) <$> encodeField v) r
 
 recToEncoding :: forall lts. (RecApply lts lts EncodeField) => JSONOptions -> Rec lts -> Encoding
 recToEncoding options r =
-  pairs $ mconcat $ reflectRec @EncodeField Proxy (\k v -> (T.pack (fieldTransform options k) `encodeKV` v)) r
+  pairs $ mconcat $ reflectRec @EncodeField Proxy (\k v -> (K.fromString (fieldTransform options k) `encodeKV` v)) r
 
 recJsonParser ::
   forall lts s.
@@ -669,7 +670,7 @@ instance RecJsonParse '[] where
   recJsonParse _ initSize _ = pure (ForallST (unsafeRNil initSize))
 
 class FromJSON a => ParseField a where
-  parseField :: Object -> T.Text -> Parser a
+  parseField :: Object -> Key -> Parser a
 
 instance FromJSON a => ParseField a where
   parseField = (.:)
@@ -692,7 +693,7 @@ instance
     let lbl :: FldProxy l
         lbl = FldProxy
     rest <- recJsonParse options initSize obj
-    (v :: t) <- obj `parseField` T.pack (fieldTransform options (symbolVal lbl))
+    (v :: t) <- obj `parseField` K.fromString (fieldTransform options (symbolVal lbl))
     pure $ ForallST (unsafeRCons (lbl := v) =<< unForallST rest)
 
 -- | Machinery for NFData
